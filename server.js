@@ -1,20 +1,24 @@
 const express = require("express");
 const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
 const app = express();
 const PORT = 4000;
 
-// In-memory data for demo (replace with file/DB for Level 3+)
-let tasks = [
-  { type: "truth", text: "What is your biggest fear?", difficulty: "easy" },
-  { type: "action", text: "Do 5 jumping jacks!", difficulty: "easy" },
-  { type: "truth", text: "Who is your hero?", difficulty: "medium" },
-  {
-    type: "action",
-    text: "Make a funny face for 5 seconds!",
-    difficulty: "hard",
-  },
-];
-// You can add memes, games, user status etc. as arrays here!
+const tasksFilePath = path.join(__dirname, "tasks.json");
+let tasks = [];
+
+function loadTasks() {
+  try {
+    const data = fs.readFileSync(tasksFilePath, "utf8");
+    tasks = JSON.parse(data);
+  } catch (err) {
+    tasks = [];
+    console.error("Could not load tasks:", err);
+  }
+}
+
+loadTasks();
 
 app.use(cors());
 app.use(express.json());
@@ -30,7 +34,6 @@ app.get("/api/tasks", (req, res) => {
 
 // POST a new game (returns a simple game id for now)
 app.post("/api/games", (req, res) => {
-  // In demo, just return random id
   const gameId = Math.random().toString(36).substr(2, 9);
   res.json({ gameId, message: "Game created!" });
 });
