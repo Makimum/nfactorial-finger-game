@@ -1,17 +1,13 @@
 {
-  "name": "nodejs-sandbox",
+  "name": "nfactorial-backend",
   "version": "1.0.0",
-  "description": "Node.js example server starter project",
-  "license": "MIT",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "start": "nodemon index.js"
+    "start": "node server.js"
   },
-  "keywords": [],
-  "author": "Ives van Hoorne",
-  "devDependencies": {
-    "@types/node": "^22.5.5",
-    "nodemon": "^3.1.5"
-  },
-  "dependencies": {}
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
 }
+
