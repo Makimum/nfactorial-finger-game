@@ -2,7 +2,6 @@
     { "type": "truth", "text": "What is your biggest fear?", "difficulty": "easy" },
     { "type": "action", "text": "Do 5 jumping jacks!", "difficulty": "easy" },
     { "type": "truth", "text": "Who is your hero?", "difficulty": "medium" },
-    { "type": "action", "text": "Make a funny face for 5 seconds!", "difficulty": "hard"},
-    { "type": "action", "text": "Climb a tree", "difficulty":"easy"}
+    { "type": "action", "text": "Make a funny face for 5 seconds!", "difficulty": "hard" }
   ]
   

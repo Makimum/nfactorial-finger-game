@@ -1,22 +1,23 @@
 const express = require("express");
 const cors = require("cors");
+const fs = require("fs");
 const app = express();
 const PORT = 4000;
 
 app.use(cors());
 app.use(express.json());
 
-// --- In-memory storage ---
-let tasks = [
-  { type: "truth", text: "What is your biggest fear?", difficulty: "easy" },
-  { type: "action", text: "Do 5 jumping jacks!", difficulty: "easy" },
-  { type: "truth", text: "Who is your hero?", difficulty: "medium" },
-  {
-    type: "action",
-    text: "Make a funny face for 5 seconds!",
-    difficulty: "hard",
-  },
-];
+// --- Load tasks from tasks.json ---
+let tasks = [];
+try {
+  const data = fs.readFileSync("tasks.json", "utf8");
+  tasks = JSON.parse(data);
+  console.log(`Loaded ${tasks.length} tasks from tasks.json`);
+} catch (err) {
+  console.error("Error loading tasks.json:", err);
+  tasks = [];
+}
+
 let games = {}; // { [gameId]: { players: [], eliminated: [], winner: null } }
 
 // --- 1. Initialize a new game ---
@@ -56,6 +57,15 @@ app.get("/api/games/:gameId/random-task", (req, res) => {
 app.post("/api/games/:gameId/players", (req, res) => {
   const { gameId } = req.params;
   const { playerName } = req.body;
+
+  // Extra validation
+  if (
+    !playerName ||
+    typeof playerName !== "string" ||
+    playerName.trim().length < 1
+  ) {
+    return res.status(400).json({ error: "Invalid player name" });
+  }
   if (!games[gameId]) {
     return res.status(404).json({ error: "Game not found" });
   }
@@ -76,7 +86,9 @@ app.post("/api/games/:gameId/eliminate", (req, res) => {
   if (!games[gameId].players.includes(playerName)) {
     return res.status(404).json({ error: "Player not found" });
   }
-  games[gameId].eliminated.push(playerName);
+  if (!games[gameId].eliminated.includes(playerName)) {
+    games[gameId].eliminated.push(playerName);
+  }
   // Check if only 1 player left, declare winner
   const remaining = games[gameId].players.filter(
     (p) => !games[gameId].eliminated.includes(p)
