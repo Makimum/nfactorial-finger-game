@@ -18,6 +18,11 @@ try {
   tasks = [];
 }
 
+// ←–– NEW: expose the full task list at GET /api/tasks
+app.get("/api/tasks", (req, res) => {
+  res.json(tasks);
+});
+
 let games = {}; // { [gameId]: { players: [], eliminated: [], winner: null } }
 
 // 1. Initialize a new game
@@ -31,32 +36,35 @@ app.post("/api/games", (req, res) => {
   res.json({ gameId, message: "Game created!" });
 });
 
-// 2. Receive a random assignment (task)
+// 2. Get a random task for a given game
 app.get("/api/games/:gameId/random-task", (req, res) => {
   const { gameId } = req.params;
   const difficulty = req.query.difficulty || "any";
+
   if (!games[gameId]) {
     return res.status(404).json({ error: "Game not found" });
   }
-  let filteredTasks = tasks;
+
+  let filtered = tasks;
   if (difficulty !== "any") {
-    filteredTasks = tasks.filter((t) => t.difficulty === difficulty);
+    filtered = tasks.filter((t) => t.difficulty === difficulty);
   }
-  if (filteredTasks.length === 0) {
+
+  if (filtered.length === 0) {
     return res
       .status(404)
       .json({ error: "No tasks found for that difficulty" });
   }
-  const task = filteredTasks[Math.floor(Math.random() * filteredTasks.length)];
+
+  const task = filtered[Math.floor(Math.random() * filtered.length)];
   res.json(task);
 });
 
-// 3. Track player status
-
-// Add a player
+// 3a. Add a player to a game
 app.post("/api/games/:gameId/players", (req, res) => {
   const { gameId } = req.params;
   const { playerName } = req.body;
+
   if (
     !playerName ||
     typeof playerName !== "string" ||
@@ -70,29 +78,34 @@ app.post("/api/games/:gameId/players", (req, res) => {
   if (games[gameId].players.includes(playerName)) {
     return res.status(400).json({ error: "Player already exists" });
   }
+
   games[gameId].players.push(playerName);
   res.json({ message: "Player added", players: games[gameId].players });
 });
 
-// Eliminate a player
+// 3b. Eliminate a player
 app.post("/api/games/:gameId/eliminate", (req, res) => {
   const { gameId } = req.params;
   const { playerName } = req.body;
+
   if (!games[gameId]) {
     return res.status(404).json({ error: "Game not found" });
   }
   if (!games[gameId].players.includes(playerName)) {
     return res.status(404).json({ error: "Player not found" });
   }
+
   if (!games[gameId].eliminated.includes(playerName)) {
     games[gameId].eliminated.push(playerName);
   }
+
   const remaining = games[gameId].players.filter(
     (p) => !games[gameId].eliminated.includes(p)
   );
   if (remaining.length === 1) {
     games[gameId].winner = remaining[0];
   }
+
   res.json({
     message: "Player eliminated",
     eliminated: games[gameId].eliminated,
@@ -100,7 +113,7 @@ app.post("/api/games/:gameId/eliminate", (req, res) => {
   });
 });
 
-// Get game status
+// 3c. Get current game status
 app.get("/api/games/:gameId/status", (req, res) => {
   const { gameId } = req.params;
   if (!games[gameId]) {
