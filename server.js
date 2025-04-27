@@ -53,10 +53,14 @@ app.get("/api/games/:gameId/random-task", (req, res) => {
 
 // --- 3. Track player status (add, eliminate, get status) ---
 
-// Add a player to a game
 app.post("/api/games/:gameId/players", (req, res) => {
   const { gameId } = req.params;
   const { playerName } = req.body;
+
+  // Debug log: See what we really get
+  console.log("DEBUG POST /api/games/:gameId/players");
+  console.log("DEBUG req.body:", req.body);
+  console.log("DEBUG playerName:", playerName);
 
   // Extra validation
   if (
@@ -64,6 +68,7 @@ app.post("/api/games/:gameId/players", (req, res) => {
     typeof playerName !== "string" ||
     playerName.trim().length < 1
   ) {
+    console.log("DEBUG - Invalid player name!");
     return res.status(400).json({ error: "Invalid player name" });
   }
   if (!games[gameId]) {
