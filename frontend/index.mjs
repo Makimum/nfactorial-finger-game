@@ -23,11 +23,27 @@ function containsBadWord(str) {
   return badWords.some((w) => lower.includes(w));
 }
 
-/* ---------- Win-stats (persisted) ---------- */
-let winStats = {};
-if (localStorage.getItem("nfact-winStats")) {
-  winStats = JSON.parse(localStorage.getItem("nfact-winStats"));
+/* ---------- global leaderboard helpers ---------- */
+async function fetchLeaderboard() {
+  return await (await fetch(`${API}/api/leaderboard`)).json();   // {nick:wins}
 }
+async function postWin(winner) {
+  await fetch(`${API}/api/game-result`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      "Game ID":   "web-" + Date.now(),       // or a real gameId if you have one
+      "timestamp": new Date().toISOString(),
+      "Name":      winner,
+      "Duration":  taskTime,
+      "Result":    1,
+      "Shared result": 0,
+      "Restart game":  0
+    })
+  });
+}
+
+let winStats = {};                // filled on demand from Airtable
 
 /* ---------- purge bad-word winners ---------- */
 function purgeBadWinners() {
@@ -630,59 +646,66 @@ function renderTasksMode() {
   };
 }
 
-// --- Winner Screen (for Elimination Mode) ---
+/* ---------- Winner Screen (Elimination mode) ---------- */
 function renderWinnerScreen() {
+
   const winner = window.remainingPlayers[0];
-  winStats[winner] = (winStats[winner] || 0) + 1;
-  localStorage.setItem("nfact-winStats", JSON.stringify(winStats));
+
+  /* 1) write one row to Airtable, 2) pull the fresh leaderboard, 3) render */
+  (async () => {
+    try {
+      await postWin(winner);
+      winStats = await fetchLeaderboard();
+    } catch (err) {
+      console.error("Leaderboard error:", err);
+      winStats = {};                 // fall back to empty board
+    }
+    showWinnerScreen();              // render once data is ready
+  })();
+
+  /* nothing else happens until async finishes */
+}
+
+/* do the actual DOM update here */
+function showWinnerScreen() {
 
   const leaderboardHTML = `
     <h3>Leaderboard</h3>
     <ol>
       ${Object.entries(winStats)
-        .sort((a, b) => b[1] - a[1])
-        .map(([name, wins]) => `<li>${name}: ${wins} wins</li>`)
-        .join("")}
-    </ol>
-  `;
+              .sort((a,b) => b[1]-a[1])
+              .map(([name,wins]) => `<li>${name}: ${wins} wins</li>`)
+              .join("")}
+    </ol>`;
 
   if (typeof confetti === "function") {
-    confetti({
-      particleCount: 80,
-      spread: 90,
-      origin: { y: 0.7 },
-      colors: playerColors,
-    });
+    confetti({ particleCount:80, spread:90, origin:{y:0.7}, colors:playerColors });
   }
-  if (navigator.vibrate) navigator.vibrate([100, 200, 300]);
+  if (navigator.vibrate) navigator.vibrate([100,200,300]);
 
   app.innerHTML = `
     <div class="confetti">🎉</div>
-    <h2 class="winner-pop">Winner: ${winner} 🎉</h2>
+    <h2 class="winner-pop">Winner: ${window.remainingPlayers[0]} 🎉</h2>
     ${leaderboardHTML}
     <button class="big-btn" id="restart-btn">Restart Game</button>
   `;
 
-  /* -------- share button (only if supported) -------- */
+  /* share button (optional) */
   if (navigator.share) {
     app.insertAdjacentHTML(
       "beforeend",
       `<button class="big-btn" id="share-btn">Share Game 🔗</button>`
     );
     document.getElementById("share-btn").onclick = () => {
-      navigator.share({
-        title: "Finger Game",
-        url: window.location.href,
-      });
+      navigator.share({ title:"Finger Game", url:window.location.href });
     };
   }
-  /* -------------------------------------------------- */
 
   document.getElementById("restart-btn").onclick = () => {
     window.remainingPlayers = null;
-    window.roundStatus = null;
-    nicknames = [];
-    currentTask = null;
+    window.roundStatus      = null;
+    nicknames               = [];
+    currentTask             = null;
     step = 0;
     render();
   };
