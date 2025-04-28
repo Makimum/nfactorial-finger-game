@@ -84,70 +84,149 @@ function render() {
          </a>`
       : "";
 
+  /* ----------------------------------------------------------------
+   STEP 0  :  Game Settings
+---------------------------------------------------------------- */
+if (step === 0) {
+  app.innerHTML = `
+    ${backLink}
+    <h2>Game Settings</h2>
+    <form id="settings-form">
+
+      <!-- ───── Mode ───── -->
+      <label>Mode:
+        <select id="mode-select">
+          <option value="simple">Simple (random winner)</option>
+          <option value="tasks">Tasks (no elimination)</option>
+          <option value="elimination" selected>Elimination (last player wins)</option>
+        </select>
+      </label><br/><br/>
+
+      <!-- ───── Difficulty ───── -->
+      <label>Task Difficulty:
+        <select id="difficulty-select">
+          <option value="any" selected>Any</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label><br/><br/>
+
+      <!-- ───── Time picker (dropdown + custom) ───── -->
+      <label>Task Time:
+        <select id="time-select">
+          ${[5,10,20,30,40,50,60]
+            .map(v => `<option value="${v}" ${v===30?"selected":""}>${v}s</option>`).join("")}
+          <option value="custom">Custom …</option>
+        </select>
+
+        <input id="time-input"
+               type="number" min="5" max="180" value="30"
+               style="display:none;width:80px;margin-left:6px"/>
+      </label><br/><br/>
+
+      <button class="big-btn call-to-action" type="submit">Next</button>
+    </form>
+  `;
+
+  /* ⇦ Back */
+  const back = document.getElementById("back-link");
+  if (back) back.onclick = (e) => { e.preventDefault(); backOneStep(); };
+
+  /* dropdown ↔ custom input toggle */
+  const timeSel = document.getElementById("time-select");
+  const timeInp = document.getElementById("time-input");
+  timeSel.onchange = () => {
+    if (timeSel.value === "custom") {
+      timeInp.style.display = "inline-block";
+      timeInp.focus();
+    } else {
+      timeInp.style.display = "none";
+      timeInp.value = timeSel.value;
+    }
+  };
+
+  /* form submit */
+  document.getElementById("settings-form").onsubmit = (e) => {
+    e.preventDefault();
+
+    gameMode       = document.getElementById("mode-select").value;
+    taskDifficulty = document.getElementById("difficulty-select").value;
+
+    /* read time, validate 5-180 s */
+    taskTime = Number(
+      timeSel.value === "custom" ? timeInp.value : timeSel.value
+    );
+    if (!taskTime || taskTime < 5 || taskTime > 180) {
+      alert("Task time must be 5…180 seconds");
+      return;
+    }
+
+    step = 1;
+    render();
+  };
+
+
   /* --------------------------------------------------------
-     STEP 0  :  Game settings
-  ---------------------------------------------------------*/
-  if (step === 0) {
-    app.innerHTML = `
-      ${backLink}
-      <h2>Game Settings</h2>
-      <form id="settings-form">
-        <label>Mode:
-          <select id="mode-select">
-            <option value="simple">Simple (random winner)</option>
-            <option value="tasks">Tasks (no elimination)</option>
-            <option value="elimination" selected>Elimination (last player wins)</option>
-          </select>
-        </label><br/><br/>
-        <label>Task Difficulty:
-          <select id="difficulty-select">
-            <option value="any" selected>Any</option>
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-        </label><br/><br/>
-        <label>Task Time (seconds):
-          <input type="number" id="time-input" value="30" min="5" max="180" />
-        </label><br/><br/>
-        <button class="big-btn call-to-action" type="submit">Next</button>
-      </form>
-    `;
-    const back = document.getElementById("back-link");
-    if (back) back.onclick = (e) => { e.preventDefault(); backOneStep(); };
+   STEP 1  :  Number of players
+---------------------------------------------------------*/
+} else if (step === 1) {
 
-    document.getElementById("settings-form").onsubmit = (e) => {
-      e.preventDefault();
-      gameMode       = document.getElementById("mode-select").value;
-      taskDifficulty = document.getElementById("difficulty-select").value;
-      taskTime       = Number(document.getElementById("time-input").value) || 30;
-      step = 1;
-      render();
-    };
+  app.innerHTML = `
+    ${backLink}
+    <h2>How many players?</h2>
 
-  /* --------------------------------------------------------
-     STEP 1  :  Number of players
-  ---------------------------------------------------------*/
-  } else if (step === 1) {
-    app.innerHTML = `
-      ${backLink}
-      <h2>How many players?</h2>
-      <input type="number" id="num-players" value="2" min="2" max="8" />
-      <button class="big-btn call-to-action" id="next-btn">Next</button>
-    `;
-    const back = document.getElementById("back-link");
-    if (back) back.onclick = (e) => { e.preventDefault(); backOneStep(); };
+    <!-- dropdown + optional custom input -->
+    <select id="num-select">
+      ${[1,2,3,4,5,6,7,8,9,10]
+        .map(v => `<option value="${v}" ${v===2?"selected":""}>${v}</option>`)
+        .join("")}
+      <option value="custom">Custom …</option>
+    </select>
 
-    document.getElementById("next-btn").onclick = () => {
-      numPlayers = Math.max(2, Math.min(8,
-                   Number(document.getElementById("num-players").value)));
-      nicknames = Array(numPlayers).fill("");
-      window.roundStatus       = undefined;
-      window.remainingPlayers  = undefined;
-      currentTask = null;
-      step = 2;
-      render();
-    };
+    <input id="num-input"
+           type="number" min="1" max="30" value="2"
+           style="display:none;width:70px;margin-left:6px"/>
+
+    <button class="big-btn call-to-action" id="next-btn">Next</button>
+  `;
+
+  /* ⇦ Back */
+  const back = document.getElementById("back-link");
+  if (back) back.onclick = (e) => { e.preventDefault(); backOneStep(); };
+
+  /* toggle between dropdown and custom number */
+  const numSel = document.getElementById("num-select");
+  const numInp = document.getElementById("num-input");
+  numSel.onchange = () => {
+    if (numSel.value === "custom") {
+      numInp.style.display = "inline-block";
+      numInp.focus();
+    } else {
+      numInp.style.display = "none";
+      numInp.value = numSel.value;
+    }
+  };
+
+  /* Next → validate & continue */
+  document.getElementById("next-btn").onclick = () => {
+    numPlayers = Number(
+      numSel.value === "custom" ? numInp.value : numSel.value
+    );
+
+    if (!numPlayers || numPlayers < 1 || numPlayers > 30) {
+      alert("Players must be between 1 and 30");
+      return;
+    }
+
+    nicknames               = Array(numPlayers).fill("");
+    window.roundStatus      = undefined;
+    window.remainingPlayers = undefined;
+    currentTask             = null;
+    step = 2;
+    render();
+  };
+
 
   /* --------------------------------------------------------
      STEP 2  :  Nicknames & validation
