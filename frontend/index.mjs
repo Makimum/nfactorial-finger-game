@@ -1,0 +1,519 @@
+// ===== Backend base URL (adjust after you deploy) =====
+const API = "https://zp5plj-4000.csb.app";
+
+// ===== Data pulled from the backend =====
+let tasks = [];
+let memes = [];
+let badWords = [];
+
+/* ---------- fetch helpers ---------- */
+async function fetchTasks() {
+  tasks = await (await fetch(`${API}/api/tasks`)).json();
+}
+async function fetchMemes() {
+  memes = await (await fetch(`${API}/api/memes`)).json();
+}
+async function fetchBadWords() {
+  badWords = await (await fetch(`${API}/api/bad-words`)).json();
+}
+
+/* ---------- profanity helper ---------- */
+function containsBadWord(str) {
+  const lower = str.toLowerCase();
+  return badWords.some((w) => lower.includes(w));
+}
+
+/* ---------- Win-stats (persisted) ---------- */
+let winStats = {};
+if (localStorage.getItem("nfact-winStats")) {
+  winStats = JSON.parse(localStorage.getItem("nfact-winStats"));
+}
+
+/* ---------- purge bad-word winners ---------- */
+function purgeBadWinners() {
+  let changed = false;
+  for (const name of Object.keys(winStats)) {
+    if (containsBadWord(name)) {
+      delete winStats[name];
+      changed = true;
+    }
+  }
+  if (changed) {
+    localStorage.setItem("nfact-winStats", JSON.stringify(winStats));
+  }
+}
+
+// --- UI Constants ---
+const playerColors = [
+  "#f7b731",
+  "#eb3b5a",
+  "#20bf6b",
+  "#3867d6",
+  "#8854d0",
+  "#fa8231",
+  "#2d98da",
+  "#fc5c65",
+];
+
+// --- Settings ---
+let gameMode = "elimination"; // default: elimination
+let taskDifficulty = "any"; // "easy", "medium", "hard", or "any"
+let taskTime = 30; // seconds
+
+// --- UI state ---
+const app = document.getElementById("app");
+let step = 0;
+let numPlayers = 2;
+let nicknames = [];
+let holdingTimeouts = {};
+let currentTask = null;
+
+// --- Main Render Function ---
+function render() {
+  if (step === 0) {
+    // --- Game Settings Screen ---
+    app.innerHTML = `
+      <h2>Game Settings</h2>
+      <form id="settings-form">
+        <label>Mode:
+          <select id="mode-select">
+            <option value="simple">Simple (random winner)</option>
+            <option value="tasks">Tasks (no elimination)</option>
+            <option value="elimination" selected>Elimination (last player wins)</option>
+          </select>
+        </label><br/><br/>
+        <label>Task Difficulty:
+          <select id="difficulty-select">
+            <option value="any" selected>Any</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label><br/><br/>
+        <label>Task Time (seconds):
+          <input type="number" id="time-input" value="30" min="5" max="180"/>
+        </label><br/><br/>
+        <button class="big-btn" type="submit">Next</button>
+      </form>
+    `;
+    document.getElementById("settings-form").onsubmit = (e) => {
+      e.preventDefault();
+      gameMode = document.getElementById("mode-select").value;
+      taskDifficulty = document.getElementById("difficulty-select").value;
+      taskTime = Number(document.getElementById("time-input").value) || 30;
+      step = 1;
+      render();
+    };
+  } else if (step === 1) {
+    // --- Number of Players ---
+    app.innerHTML = `
+      <h2>How many players?</h2>
+      <input type="number" id="num-players" value="2" min="2" max="8" />
+      <button class="big-btn" id="next-btn">Next</button>
+    `;
+    document.getElementById("next-btn").onclick = () => {
+      numPlayers = Math.max(
+        2,
+        Math.min(8, Number(document.getElementById("num-players").value))
+      );
+      nicknames = Array(numPlayers).fill("");
+      window.roundStatus = undefined;
+      window.remainingPlayers = undefined;
+      currentTask = null;
+      step = 2;
+      render();
+    };
+  } else if (step === 2) {
+    // --- Player Nicknames ---
+    app.innerHTML = `
+      <h2>Enter Player Nicknames</h2>
+      <form id="name-form">
+        ${nicknames
+          .map(
+            (_, i) => `
+          <input
+            type="text"
+            placeholder="Player ${i + 1} name"
+            value=""
+            id="name-${i}"
+            required
+            class="player-input"
+            style="background:${
+              playerColors[i % playerColors.length]
+            }; color:white; font-weight:bold; border:none; border-radius:8px; padding:8px 14px; margin-bottom:10px;"
+          /><br/>
+        `
+          )
+          .join("")}
+        <button class="big-btn" type="submit" id="start-btn">Start Game</button>
+        <div id="nickname-error" style="color:red; margin-top:10px;"></div>
+      </form>
+    `;
+    document.getElementById("name-form").onsubmit = (e) => {
+      e.preventDefault();
+      nicknames = nicknames.map((_, i) => {
+        const val = document.getElementById(`name-${i}`).value.trim();
+        return val || `Player ${i + 1}`;
+      });
+
+      // --- Error handling ---
+      let errorMsg = "";
+      if (nicknames.some(containsBadWord)) {
+        errorMsg = "One or more nicknames contain inappropriate language.";
+      } else if (new Set(nicknames).size < nicknames.length) {
+        errorMsg = "Duplicate nicknames are not allowed.";
+      } else if (nicknames.some((name) => name === "")) {
+        errorMsg = "Nicknames cannot be blank.";
+      }
+      if (errorMsg) {
+        document.getElementById("nickname-error").innerText = errorMsg;
+        return;
+      }
+      // --- End error handling ---
+
+      step = 3;
+      window.roundStatus = Array(numPlayers).fill(false);
+      window.remainingPlayers = [...nicknames];
+      currentTask = null;
+      render();
+    };
+  } else if (step === 3) {
+    // --- Game Modes Handling ---
+    if (gameMode === "elimination") {
+      renderHoldToReady();
+    } else if (gameMode === "tasks") {
+      renderTasksMode();
+    } else if (gameMode === "simple") {
+      renderSimpleWinner();
+    }
+  } else if (step === 4) {
+    renderWinnerScreen();
+  }
+}
+
+// --- Hold to Ready for Elimination Mode ---
+function renderHoldToReady() {
+  app.innerHTML = `
+    <h2>Players - Hold Down Your Finger!</h2>
+    <ul style="padding-left:0;">
+      ${nicknames
+        .map(
+          (n, i) => `
+        <li style="background:${
+          playerColors[i % playerColors.length]
+        }; color:white; padding:8px 14px; border-radius:12px; margin-bottom:8px; font-weight:bold; display:flex; align-items:center;">
+          <span style="flex:1;">${n}</span>
+          <button class="big-btn" id="join-btn-${i}" ${
+            window.roundStatus[i] ? "disabled" : ""
+          } style="margin-left:12px;">
+            ${window.roundStatus[i] ? "Ready!" : "Hold to Ready"}
+          </button>
+        </li>
+      `
+        )
+        .join("")}
+    </ul>
+    <p style="font-size:0.95em; color:#555; margin-top:-8px;">
+      (Players must hold their button for 1 second)
+    </p>
+    <button class="big-btn" id="start-round-btn" ${
+      window.roundStatus.some((v) => !v) ? "disabled" : ""
+    }>
+      Start Elimination
+    </button>
+  `;
+
+  nicknames.forEach((_, i) => {
+    const btn = document.getElementById(`join-btn-${i}`);
+    btn.onmousedown = btn.ontouchstart = () => {
+      btn.innerText = "Holding...";
+      btn.style.background = "#20bf6b";
+      holdingTimeouts[i] = setTimeout(() => {
+        window.roundStatus[i] = true;
+        render();
+      }, 1000);
+    };
+    btn.onmouseup = btn.ontouchend = () => {
+      btn.innerText = "Hold to Ready";
+      btn.style.background = "";
+      clearTimeout(holdingTimeouts[i]);
+    };
+  });
+
+  document.getElementById("start-round-btn").onclick = () => {
+    step = 5; // custom step for elimination animation
+    renderElimination();
+  };
+}
+
+// --- Elimination Animation and Logic ---
+function renderElimination() {
+  if (!window.remainingPlayers) window.remainingPlayers = [...nicknames];
+
+  let highlightIdx = 0;
+  app.innerHTML = `
+    <h2>Eliminating...</h2>
+    <ul>
+      ${window.remainingPlayers
+        .map(
+          (name, i) => `
+        <li style="background:${
+          playerColors[i % playerColors.length]
+        }; color:white; padding:16px; border-radius:14px; margin-bottom:8px; font-weight:bold;">
+          ${name}
+        </li>
+      `
+        )
+        .join("")}
+    </ul>
+    <p style="color:#888;">Suspense...</p>
+  `;
+
+  const highlightInterval = setInterval(() => {
+    app.innerHTML = `
+      <h2>Eliminating...</h2>
+      <ul>
+        ${window.remainingPlayers
+          .map(
+            (name, i) => `
+          <li style="background:${
+            i === highlightIdx
+              ? "#eb3b5a"
+              : playerColors[i % playerColors.length]
+          }; color:white; padding:16px; border-radius:14px; margin-bottom:8px; font-weight:bold; transition:background 0.3s;">
+            ${name}
+          </li>
+        `
+          )
+          .join("")}
+      </ul>
+      <p style="color:#888;">Suspense...</p>
+    `;
+    highlightIdx = (highlightIdx + 1) % window.remainingPlayers.length;
+  }, 110);
+
+  setTimeout(() => {
+    clearInterval(highlightInterval);
+    const eliminatedIdx = Math.floor(
+      Math.random() * window.remainingPlayers.length
+    );
+    const eliminatedName = window.remainingPlayers[eliminatedIdx];
+    if (window.navigator && window.navigator.vibrate)
+      window.navigator.vibrate(250);
+
+    const filteredTasks =
+      taskDifficulty === "any"
+        ? tasks
+        : tasks.filter((t) => t.difficulty === taskDifficulty);
+    const task =
+      filteredTasks[Math.floor(Math.random() * filteredTasks.length)];
+    const memeImg = memes[Math.floor(Math.random() * memes.length)];
+
+    app.innerHTML = `
+      <div style="background:${
+        playerColors[eliminatedIdx % playerColors.length]
+      }; color:white; padding:20px; border-radius:16px; margin-bottom:18px; text-align:center; animation:flash 0.8s;">
+        <h2>Eliminated Player: ${eliminatedName}</h2>
+      </div>
+      <h3>Task: (${task.type.toUpperCase()}) <span style="color:#555;font-size:0.85em;">[${taskDifficulty}, ${taskTime}s]</span></h3>
+      <p>${task.text}</p>
+      <img src="${memeImg}" alt="meme" style="max-width:220px; margin:18px auto; display:block; border-radius:12px;" onerror="this.style.display='none';" />
+      ${
+        window.remainingPlayers.length > 2
+          ? `<button class="big-btn" id="eliminate-btn">Eliminate & Next Round</button>`
+          : `<button class="big-btn" id="final-btn">Show Winner</button>`
+      }
+    `;
+
+    if (window.remainingPlayers.length > 2) {
+      document.getElementById("eliminate-btn").onclick = () => {
+        window.remainingPlayers.splice(eliminatedIdx, 1);
+        window.roundStatus = Array(window.remainingPlayers.length).fill(false);
+        nicknames = [...window.remainingPlayers];
+        numPlayers = window.remainingPlayers.length;
+        step = 3;
+        render();
+      };
+    } else {
+      document.getElementById("final-btn").onclick = () => {
+        step = 4;
+        render();
+      };
+    }
+  }, 1600);
+}
+
+// --- Simple Winner Mode ---
+function renderSimpleWinner() {
+  window.remainingPlayers = [...nicknames];
+
+  let highlightIdx = 0;
+  app.innerHTML = `
+    <h2>Choosing Winner...</h2>
+    <ul>
+      ${nicknames
+        .map(
+          (n, i) => `
+        <li style="background:${
+          playerColors[i % playerColors.length]
+        }; color:white; padding:16px; border-radius:14px; margin-bottom:8px; font-weight:bold;">
+          ${n}
+        </li>
+      `
+        )
+        .join("")}
+    </ul>
+    <p style="color:#888;">Spinning...</p>
+  `;
+
+  const interval = setInterval(() => {
+    app.innerHTML = `
+      <h2>Choosing Winner...</h2>
+      <ul>
+        ${nicknames
+          .map(
+            (n, i) => `
+          <li style="background:${
+            i === highlightIdx
+              ? "#20bf6b"
+              : playerColors[i % playerColors.length]
+          }; color:white; padding:16px; border-radius:14px; margin-bottom:8px; font-weight:bold; transition:background 0.3s;">
+            ${n}
+          </li>
+        `
+          )
+          .join("")}
+      </ul>
+      <p style="color:#888;">Spinning...</p>
+    `;
+    highlightIdx = (highlightIdx + 1) % nicknames.length;
+  }, 120);
+
+  setTimeout(() => {
+    clearInterval(interval);
+    const winnerIdx = Math.floor(Math.random() * nicknames.length);
+    const winner = nicknames[winnerIdx];
+
+    if (typeof confetti === "function") {
+      confetti({
+        particleCount: 80,
+        spread: 90,
+        origin: { y: 0.7 },
+        colors: playerColors,
+      });
+    }
+    if (window.navigator && window.navigator.vibrate)
+      window.navigator.vibrate([200, 100, 200]);
+
+    app.innerHTML = `
+      <div class="confetti">🎉</div>
+      <h2 class="winner-pop">Winner: ${winner} 🎉</h2>
+      <button class="big-btn" id="restart-btn">Restart Game</button>
+    `;
+    document.getElementById("restart-btn").onclick = () => {
+      window.remainingPlayers = null;
+      window.roundStatus = null;
+      nicknames = [];
+      currentTask = null;
+      step = 0;
+      render();
+    };
+  }, 1800);
+}
+
+// --- Tasks Mode (everyone gets a random task, no elimination) ---
+function renderTasksMode() {
+  const filteredTasks =
+    taskDifficulty === "any"
+      ? tasks
+      : tasks.filter((t) => t.difficulty === taskDifficulty);
+
+  if (!currentTask) {
+    currentTask = nicknames.map(
+      () => filteredTasks[Math.floor(Math.random() * filteredTasks.length)]
+    );
+  }
+
+  app.innerHTML = `
+    <h2>Random Tasks for Everyone!</h2>
+    <ul>
+      ${nicknames
+        .map(
+          (n, i) => `
+        <li class="task-card" style="background:${
+          playerColors[i % playerColors.length]
+        }; color:white; padding:14px; border-radius:10px; margin-bottom:10px;">
+          <strong>${n}</strong>:<br/>
+          <em>${currentTask[
+            i
+          ].type.toUpperCase()} (${taskDifficulty}, ${taskTime}s)</em><br/>
+          ${currentTask[i].text}
+        </li>
+      `
+        )
+        .join("")}
+    </ul>
+    <button class="big-btn" id="restart-btn">Restart Game</button>
+  `;
+  document.getElementById("restart-btn").onclick = () => {
+    currentTask = null;
+    window.remainingPlayers = null;
+    window.roundStatus = null;
+    nicknames = [];
+    step = 0;
+    render();
+  };
+}
+
+// --- Winner Screen (for Elimination Mode) ---
+function renderWinnerScreen() {
+  const winner = window.remainingPlayers[0];
+  winStats[winner] = (winStats[winner] || 0) + 1;
+  localStorage.setItem("nfact-winStats", JSON.stringify(winStats));
+  const leaderboardHTML = `
+    <h3>Leaderboard</h3>
+    <ol>
+      ${Object.entries(winStats)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, wins]) => `<li>${name}: ${wins} wins</li>`)
+        .join("")}
+    </ol>
+  `;
+
+  if (typeof confetti === "function") {
+    confetti({
+      particleCount: 80,
+      spread: 90,
+      origin: { y: 0.7 },
+      colors: playerColors,
+    });
+  }
+  if (window.navigator && window.navigator.vibrate)
+    window.navigator.vibrate([100, 200, 300]);
+
+  app.innerHTML = `
+    <div class="confetti">🎉</div>
+    <h2 class="winner-pop">Winner: ${winner} 🎉</h2>
+    ${leaderboardHTML}
+    <button class="big-btn" id="restart-btn">Restart Game</button>
+  `;
+  document.getElementById("restart-btn").onclick = () => {
+    window.remainingPlayers = null;
+    window.roundStatus = null;
+    nicknames = [];
+    currentTask = null;
+    step = 0;
+    render();
+  };
+}
+
+// --- Start the game (wait for all 3 datasets) ---
+Promise.all([fetchTasks(), fetchMemes(), fetchBadWords()])
+  .then(() => {
+    purgeBadWinners(); // remove stored offensive names
+    render(); // show UI
+  })
+  .catch((err) => {
+    console.error(err);
+    app.innerHTML = `<p style="color:red;padding:20px">Failed to load data:<br>${err}</p>`;
+  });
