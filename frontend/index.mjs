@@ -470,6 +470,7 @@ function renderWinnerScreen() {
   const winner = window.remainingPlayers[0];
   winStats[winner] = (winStats[winner] || 0) + 1;
   localStorage.setItem("nfact-winStats", JSON.stringify(winStats));
+
   const leaderboardHTML = `
     <h3>Leaderboard</h3>
     <ol>
@@ -488,8 +489,7 @@ function renderWinnerScreen() {
       colors: playerColors,
     });
   }
-  if (window.navigator && window.navigator.vibrate)
-    window.navigator.vibrate([100, 200, 300]);
+  if (navigator.vibrate) navigator.vibrate([100, 200, 300]);
 
   app.innerHTML = `
     <div class="confetti">🎉</div>
@@ -497,6 +497,22 @@ function renderWinnerScreen() {
     ${leaderboardHTML}
     <button class="big-btn" id="restart-btn">Restart Game</button>
   `;
+
+  /* -------- share button (only if supported) -------- */
+  if (navigator.share) {
+    app.insertAdjacentHTML(
+      "beforeend",
+      `<button class="big-btn" id="share-btn">Share Game 🔗</button>`
+    );
+    document.getElementById("share-btn").onclick = () => {
+      navigator.share({
+        title: "Finger Game",
+        url: window.location.href,
+      });
+    };
+  }
+  /* -------------------------------------------------- */
+
   document.getElementById("restart-btn").onclick = () => {
     window.remainingPlayers = null;
     window.roundStatus = null;
