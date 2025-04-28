@@ -126,3 +126,6 @@ Integrate social features like referral bonuses, ingame promotions, and leaderbo
 Due to a tight timeline (CEESA Math Competition trip and incubator challenge overlap), the project was built within approximately 2 full working days.
 Despite this, the app progressed from a simple concept to a working web product with backend, database integration, and live deployment — a major accomplishment given the constraints.
 The brainstorming and planning work done during the process lays a solid foundation for future development beyond this challenge.
+## Demo Video
+
+Watch the demo here: [Loom Video](https://www.loom.com/share/2fd8fa40be58431fb3f2ddd7336a0416?sid=5555c24c-46c4-4707-9937-e13ddbee0699)
