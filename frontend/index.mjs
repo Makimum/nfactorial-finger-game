@@ -231,78 +231,102 @@ function render() {
   }
 }
 
-/* ---------- Hold-to-Ready screen (Elimination mode) ---------- */
+/* ---------- Hold-to-Ready (Elimination mode) ---------- */
 function renderHoldToReady() {
-  /* are all players ready? */
+  /* ← Back link (always visible on this screen) */
+  const backLink = `
+    <a href="#" id="back-link"
+       style="text-decoration:none;
+              font-size:.9em;
+              display:inline-block;
+              margin-bottom:6px">
+      ← Back
+    </a>`;
+
+  /* is EVERYONE ready? */
   const allReady = window.roundStatus.every(Boolean);
 
-  /* main markup */
+  /* ---------- main markup ---------- */
   app.innerHTML = `
+    ${backLink}
     <h2>Players – Hold Down Your Finger!</h2>
+
     <ul style="padding-left:0;">
       ${nicknames
         .map(
           (name, i) => `
-        <li style="background:${playerColors[i % playerColors.length]};
-                   color:white;padding:8px 14px;border-radius:12px;
-                   margin-bottom:8px;font-weight:bold;display:flex;align-items:center;">
-          <span style="flex:1;">${name}</span>
-          <button class="big-btn"
-                  id="ready-btn-${i}"
-                  style="margin-left:12px;">
-            ${window.roundStatus[i] ? "Ready!" : "Hold to Ready"}
-          </button>
-        </li>`
+            <li style="
+                 background:${playerColors[i % playerColors.length]};
+                 color:white;padding:8px 14px;border-radius:12px;
+                 margin-bottom:8px;font-weight:bold;display:flex;align-items:center;">
+              <span style="flex:1;">${name}</span>
+              <button class="big-btn"
+                      id="ready-btn-${i}"
+                      style="margin-left:12px;">
+                ${window.roundStatus[i] ? "Ready!" : "Hold to Ready"}
+              </button>
+            </li>`
         )
         .join("")}
     </ul>
+
     <p style="font-size:.95em;color:#555;margin-top:-8px">
       (Players must hold their button for 1&nbsp;second)
     </p>
+
     ${
       allReady
         ? `<button class="big-btn call-to-action" id="start-btn">
              Start Elimination
            </button>`
-        : "" /* hidden until everyone is ready */
+        : ""   /* hidden until everyone is ready */
     }
   `;
 
-  /* -------- attach per-player handlers -------- */
+  /* ---- “← Back” handler ---- */
+  const back = document.getElementById("back-link");
+  if (back) {
+    back.onclick = (e) => {
+      e.preventDefault();
+      backOneStep();          // go to previous wizard step
+    };
+  }
+
+  /* -------- per-player hold-to-ready handlers -------- */
   nicknames.forEach((_, i) => {
     const btn = document.getElementById(`ready-btn-${i}`);
 
-    /* if already ready: allow long-press to cancel */
+    /* If already ready, a long-press cancels */
     if (window.roundStatus[i]) {
       btn.onmousedown = btn.ontouchstart = (e) => {
         e.preventDefault();
-        window.roundStatus[i] = false;
-        renderHoldToReady();               // instant re-render
+        window.roundStatus[i] = false;      // un-ready this player
+        renderHoldToReady();                // re-render (hides start-btn)
       };
-      return;                              // skip hold-logic below
+      return;                               // skip hold logic below
     }
 
-    /* not ready yet → set up hold-to-ready */
+    /* Not ready yet → set up 1-second hold */
     btn.onmousedown = btn.ontouchstart = () => {
       holdingTimeouts[i] = setTimeout(() => {
-        window.roundStatus[i] = true;      // mark as ready
-        renderHoldToReady();               // re-render (may show start-btn)
+        window.roundStatus[i] = true;       // mark ready
+        renderHoldToReady();                // re-render (may show start-btn)
       }, 1000);
       btn.innerText = "Holding…";
       btn.style.background = "#20bf6b";
     };
     btn.onmouseup = btn.ontouchend = () => {
-      clearTimeout(holdingTimeouts[i]);    // cancelled before 1 s
+      clearTimeout(holdingTimeouts[i]);     // released too early → cancel
       btn.innerText = "Hold to Ready";
       btn.style.background = "";
     };
   });
 
-  /* start game when EVERYONE is ready */
+  /* ---- Start when ALL ready ---- */
   const startBtn = document.getElementById("start-btn");
   if (startBtn) {
     startBtn.onclick = () => {
-      step = 5;            // elimination animation step
+      step = 5;                 // proceed to elimination animation
       renderElimination();
     };
   }
