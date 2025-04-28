@@ -231,59 +231,81 @@ function render() {
   }
 }
 
-// --- Hold to Ready for Elimination Mode ---
+/* ---------- Hold-to-Ready screen (Elimination mode) ---------- */
 function renderHoldToReady() {
+  /* are all players ready? */
+  const allReady = window.roundStatus.every(Boolean);
+
+  /* main markup */
   app.innerHTML = `
-    <h2>Players - Hold Down Your Finger!</h2>
+    <h2>Players – Hold Down Your Finger!</h2>
     <ul style="padding-left:0;">
       ${nicknames
         .map(
-          (n, i) => `
-        <li style="background:${
-          playerColors[i % playerColors.length]
-        }; color:white; padding:8px 14px; border-radius:12px; margin-bottom:8px; font-weight:bold; display:flex; align-items:center;">
-          <span style="flex:1;">${n}</span>
-          <button class="big-btn" id="join-btn-${i}" ${
-            window.roundStatus[i] ? "disabled" : ""
-          } style="margin-left:12px;">
+          (name, i) => `
+        <li style="background:${playerColors[i % playerColors.length]};
+                   color:white;padding:8px 14px;border-radius:12px;
+                   margin-bottom:8px;font-weight:bold;display:flex;align-items:center;">
+          <span style="flex:1;">${name}</span>
+          <button class="big-btn"
+                  id="ready-btn-${i}"
+                  style="margin-left:12px;">
             ${window.roundStatus[i] ? "Ready!" : "Hold to Ready"}
           </button>
-        </li>
-      `
+        </li>`
         )
         .join("")}
     </ul>
-    <p style="font-size:0.95em; color:#555; margin-top:-8px;">
-      (Players must hold their button for 1 second)
+    <p style="font-size:.95em;color:#555;margin-top:-8px">
+      (Players must hold their button for 1&nbsp;second)
     </p>
-    <button class="big-btn" id="start-round-btn" ${
-      window.roundStatus.some((v) => !v) ? "disabled" : ""
-    }>
-      Start Elimination
-    </button>
+    ${
+      allReady
+        ? `<button class="big-btn call-to-action" id="start-btn">
+             Start Elimination
+           </button>`
+        : "" /* hidden until everyone is ready */
+    }
   `;
 
+  /* -------- attach per-player handlers -------- */
   nicknames.forEach((_, i) => {
-    const btn = document.getElementById(`join-btn-${i}`);
+    const btn = document.getElementById(`ready-btn-${i}`);
+
+    /* if already ready: allow long-press to cancel */
+    if (window.roundStatus[i]) {
+      btn.onmousedown = btn.ontouchstart = (e) => {
+        e.preventDefault();
+        window.roundStatus[i] = false;
+        renderHoldToReady();               // instant re-render
+      };
+      return;                              // skip hold-logic below
+    }
+
+    /* not ready yet → set up hold-to-ready */
     btn.onmousedown = btn.ontouchstart = () => {
-      btn.innerText = "Holding...";
-      btn.style.background = "#20bf6b";
       holdingTimeouts[i] = setTimeout(() => {
-        window.roundStatus[i] = true;
-        render();
+        window.roundStatus[i] = true;      // mark as ready
+        renderHoldToReady();               // re-render (may show start-btn)
       }, 1000);
+      btn.innerText = "Holding…";
+      btn.style.background = "#20bf6b";
     };
     btn.onmouseup = btn.ontouchend = () => {
+      clearTimeout(holdingTimeouts[i]);    // cancelled before 1 s
       btn.innerText = "Hold to Ready";
       btn.style.background = "";
-      clearTimeout(holdingTimeouts[i]);
     };
   });
 
-  document.getElementById("start-round-btn").onclick = () => {
-    step = 5; // custom step for elimination animation
-    renderElimination();
-  };
+  /* start game when EVERYONE is ready */
+  const startBtn = document.getElementById("start-btn");
+  if (startBtn) {
+    startBtn.onclick = () => {
+      step = 5;            // elimination animation step
+      renderElimination();
+    };
+  }
 }
 
 // --- Elimination Animation and Logic ---
