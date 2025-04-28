@@ -4,13 +4,19 @@ body {
   margin: 0;
   min-height: 100vh;
 }
+html,
+body {
+  height: 100%;
+}
 
+/* ---------- Card container ---------- */
 #app {
-  max-width: 480px;
+  width: 90vw; /* take 90 % of the viewport on phones   */
+  max-width: 480px; /* but don’t exceed desktop size          */
   margin: 44px auto;
   background: white;
   border-radius: 18px;
-  padding: 32px 18px 28px 18px;
+  padding: 32px 18px 28px;
   box-shadow: 0 8px 32px rgba(44, 62, 80, 0.18);
   min-height: 420px;
   position: relative;
@@ -137,11 +143,6 @@ li.suspense-highlight {
 }
 
 @media (max-width: 600px) {
-  #app {
-    max-width: 99vw;
-    padding: 12px 2vw 20px 2vw;
-    min-height: 70vw;
-  }
   .big-btn {
     font-size: 1em;
     padding: 10px 8vw;
