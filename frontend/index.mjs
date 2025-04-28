@@ -67,88 +67,79 @@ let numPlayers = 2;
 let nicknames = [];
 let holdingTimeouts = {};
 let currentTask = null;
-
-// --- Main Render Function ---
+function backOneStep() {
+  if (step > 0) {
+    step -= 1;
+    render();
+  }
+}
+/* ---------- Main Render Function ---------- */
 function render() {
+  /* create the ← Back link for this render pass */
+  const backLink =
+    step > 0
+      ? `<a href="#" id="back-link"
+             style="text-decoration:none;font-size:.9em;display:inline-block;margin-bottom:6px">
+           ← Back
+         </a>`
+      : "";
+
+  /* ----------------------------------------------------------------
+     STEP 0  :  Game settings
+  ---------------------------------------------------------------- */
   if (step === 0) {
-    // --- Game Settings Screen ---
     app.innerHTML = `
+      ${backLink}
       <h2>Game Settings</h2>
-      <form id="settings-form">
-        <label>Mode:
-          <select id="mode-select">
-            <option value="simple">Simple (random winner)</option>
-            <option value="tasks">Tasks (no elimination)</option>
-            <option value="elimination" selected>Elimination (last player wins)</option>
-          </select>
-        </label><br/><br/>
-        <label>Task Difficulty:
-          <select id="difficulty-select">
-            <option value="any" selected>Any</option>
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-        </label><br/><br/>
-        <label>Task Time (seconds):
-          <input type="number" id="time-input" value="30" min="5" max="180"/>
-        </label><br/><br/>
-        <button class="big-btn" type="submit">Next</button>
-      </form>
+      …(unchanged markup)…
     `;
+    /* enable back */
+    const back = document.getElementById("back-link");
+    if (back) back.onclick = (e) => { e.preventDefault(); backOneStep(); };
+
     document.getElementById("settings-form").onsubmit = (e) => {
-      e.preventDefault();
-      gameMode = document.getElementById("mode-select").value;
-      taskDifficulty = document.getElementById("difficulty-select").value;
-      taskTime = Number(document.getElementById("time-input").value) || 30;
-      step = 1;
-      render();
+      …(unchanged)…
     };
+
+  /* ----------------------------------------------------------------
+     STEP 1  :  Number of players
+  ---------------------------------------------------------------- */
   } else if (step === 1) {
-    // --- Number of Players ---
     app.innerHTML = `
+      ${backLink}
       <h2>How many players?</h2>
-      <input type="number" id="num-players" value="2" min="2" max="8" />
-      <button class="big-btn" id="next-btn">Next</button>
+      …(unchanged markup)…
     `;
-    document.getElementById("next-btn").onclick = () => {
-      numPlayers = Math.max(
-        2,
-        Math.min(8, Number(document.getElementById("num-players").value))
-      );
-      nicknames = Array(numPlayers).fill("");
-      window.roundStatus = undefined;
-      window.remainingPlayers = undefined;
-      currentTask = null;
-      step = 2;
-      render();
-    };
+    const back = document.getElementById("back-link");
+    if (back) back.onclick = (e) => { e.preventDefault(); backOneStep(); };
+
+    document.getElementById("next-btn").onclick = () => { … };
+
+  /* ----------------------------------------------------------------
+     STEP 2  :  Nicknames
+  ---------------------------------------------------------------- */
   } else if (step === 2) {
-    // --- Player Nicknames ---
+
+    /* build error box only when there is a stored message */
+    const errorBlock = window.nicknameError
+      ? `<div class="error-message">${window.nicknameError}</div>`
+      : "";
+
     app.innerHTML = `
+      ${backLink}
       <h2>Enter Player Nicknames</h2>
       <form id="name-form">
-        ${nicknames
-          .map(
-            (_, i) => `
-          <input
-            type="text"
-            placeholder="Player ${i + 1} name"
-            value=""
-            id="name-${i}"
-            required
-            class="player-input"
-            style="background:${
-              playerColors[i % playerColors.length]
-            }; color:white; font-weight:bold; border:none; border-radius:8px; padding:8px 14px; margin-bottom:10px;"
-          /><br/>
-        `
-          )
-          .join("")}
-        <button class="big-btn" type="submit" id="start-btn">Start Game</button>
-        <div id="nickname-error" style="color:red; margin-top:10px;"></div>
+        ${nicknames.map((_,i)=>` …input… `).join("")}
+        <button class="big-btn call-to-action" type="submit" id="start-btn">
+          Start Game
+        </button>
       </form>
+      ${errorBlock}      <!-- shows only when needed -->
     `;
+
+    const back = document.getElementById("back-link");
+    if (back) back.onclick = (e) => { e.preventDefault(); backOneStep(); };
+
     document.getElementById("name-form").onsubmit = (e) => {
       e.preventDefault();
       nicknames = nicknames.map((_, i) => {
@@ -156,40 +147,43 @@ function render() {
         return val || `Player ${i + 1}`;
       });
 
-      // --- Error handling ---
+      /* ---- validation ---- */
       let errorMsg = "";
       if (nicknames.some(containsBadWord)) {
         errorMsg = "One or more nicknames contain inappropriate language.";
       } else if (new Set(nicknames).size < nicknames.length) {
         errorMsg = "Duplicate nicknames are not allowed.";
-      } else if (nicknames.some((name) => name === "")) {
-        errorMsg = "Nicknames cannot be blank.";
       }
+
       if (errorMsg) {
-        document.getElementById("nickname-error").innerText = errorMsg;
+        window.nicknameError = errorMsg;   // store, re-render to show box
+        render();
         return;
       }
-      // --- End error handling ---
+      window.nicknameError = "";           // clear any old message
 
+      /* ---- continue ---- */
       step = 3;
-      window.roundStatus = Array(numPlayers).fill(false);
+      window.roundStatus      = Array(numPlayers).fill(false);
       window.remainingPlayers = [...nicknames];
       currentTask = null;
       render();
     };
+
+  /* ----------------------------------------------------------------
+     STEP 3 / 4
+  ---------------------------------------------------------------- */
   } else if (step === 3) {
-    // --- Game Modes Handling ---
-    if (gameMode === "elimination") {
-      renderHoldToReady();
-    } else if (gameMode === "tasks") {
-      renderTasksMode();
-    } else if (gameMode === "simple") {
-      renderSimpleWinner();
-    }
+    if (gameMode === "elimination")      renderHoldToReady();
+    else if (gameMode === "tasks")       renderTasksMode();
+    else if (gameMode === "simple")      renderSimpleWinner();
+
   } else if (step === 4) {
     renderWinnerScreen();
   }
 }
+
+
 
 // --- Hold to Ready for Elimination Mode ---
 function renderHoldToReady() {
