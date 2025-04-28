@@ -1,5 +1,5 @@
-// ===== Backend base URL (adjust after you deploy) =====
-const API = "https://zp5plj-4000.csb.app";
+// ===== Backend base URL =====
+const API = "https://nfactorial-backend.onrender.com";
 
 // ===== Data pulled from the backend =====
 let tasks = [];
